@@ -1,7 +1,7 @@
 [project]
 name = "slack-canvas-creator-from-threads"
 version = "0.1.0"
-description = ""
+description = "Slack app to create canvases from threads using LLMs."
 authors = [
     {name = "Yunhyeon Jeong",email = "jjj999to@gmail.com"}
 ]
