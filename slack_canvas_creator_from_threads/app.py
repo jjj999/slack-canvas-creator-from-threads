@@ -1,7 +1,7 @@
 """Main application logic for the Slack Canvas Creator."""
 
 import logging
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 
 from .slack_service import SlackService
 from .openai_service import OpenAIService
@@ -96,6 +96,6 @@ class CanvasCreatorApp:
                     text=f"<@{user_id}> Canvasの作成中にエラーが発生しました: {str(e)}",
                     thread_ts=thread_ts
                 )
-            except:
+            except Exception:
                 pass  # Don't fail if we can't send error message
             raise

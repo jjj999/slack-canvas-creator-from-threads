@@ -34,7 +34,6 @@ class OpenAIService:
             for msg in messages:
                 user: str = msg.get('user', 'Unknown')
                 text: str = msg.get('text', '')
-                timestamp: str = msg.get('ts', '')
                 formatted_messages.append(f"[{user}]: {text}")
 
             thread_content: str = "\n".join(formatted_messages)

@@ -241,7 +241,6 @@ class SlackService:
             # Canvas URLの正しい形式: https://workspace.slack.com/docs/TEAM_ID/CANVAS_ID
             # チーム情報を取得して正確なURLを生成
 
-            team_info = None
             workspace_url = None
             team_id = None
 

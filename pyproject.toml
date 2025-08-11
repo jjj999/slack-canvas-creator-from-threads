@@ -24,3 +24,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.group.dev.dependencies]
 mkdocs-material = "^9.6.16"
 pytest = "^8.4.1"
+flake8 = "^7.3.0"
+
+[tool.poetry.scripts]
+lint = "flake8 slack_canvas_creator_from_threads/"

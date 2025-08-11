@@ -1,6 +1,5 @@
 """Configuration settings for the Slack Canvas Creator app."""
 
-import os
 from typing import Optional
 
 try:

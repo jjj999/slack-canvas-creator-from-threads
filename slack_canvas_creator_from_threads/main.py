@@ -312,7 +312,7 @@ async def handle_create_canvas_button(ack: Ack, body: Dict[str, Any], client: As
                     }
                 ]
             )
-        except:
+        except Exception:
             pass
 
 
