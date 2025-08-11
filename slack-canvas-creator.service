@@ -9,9 +9,9 @@ Type=exec
 User=slackapp
 Group=slackapp
 WorkingDirectory=/opt/slack-canvas-creator-from-threads
-Environment=PATH=/opt/slack-canvas-creator-from-threads/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/slackapp/.local/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=/opt/slack-canvas-creator-from-threads/.env
-ExecStart=/opt/slack-canvas-creator-from-threads/.venv/bin/python run.py
+ExecStart=/bin/bash -c 'export PYTHONPATH=/opt/slack-canvas-creator-from-threads:$(python3 -c "import site; print(site.USER_SITE)") && /usr/bin/python3 run.py'
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
 RestartSec=5

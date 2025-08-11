@@ -104,6 +104,12 @@ ngrok http 3000
 
 本番環境でSlackアプリをUbuntuのsystemdサービスとして起動することができます。
 
+### システム要件
+
+- **OS**: Ubuntu 24.04 LTS以降
+- **Python**: 3.12以降（Ubuntu 24.04にデフォルトで含まれます）
+- **pip**: Python標準のパッケージマネージャー
+
 ### 自動デプロイ
 
 付属のデプロイスクリプトを使用して簡単にインストールできます：
@@ -129,7 +135,7 @@ sudo systemctl start slack-canvas-creator
 
 #### 1. 専用ユーザーの作成
 ```bash
-sudo useradd --system --home-dir /opt/slack-canvas-creator-from-threads --shell /bin/false slackapp
+sudo useradd --system --create-home --home-dir /home/slackapp --shell /bin/false slackapp
 ```
 
 #### 2. プロジェクトファイルのコピー
@@ -139,10 +145,15 @@ sudo cp -r . /opt/slack-canvas-creator-from-threads/
 sudo chown -R slackapp:slackapp /opt/slack-canvas-creator-from-threads
 ```
 
-#### 3. Poetry環境のセットアップ
+#### 3. Python依存関係のインストール
 ```bash
 cd /opt/slack-canvas-creator-from-threads
-sudo -u slackapp poetry install --only=main
+
+# Python 3.12以上が必要（Ubuntu 24.04以降）
+python3 --version
+
+# 依存関係をユーザーレベルでインストール
+sudo -u slackapp python3 -m pip install --user -r requirements.txt
 ```
 
 #### 4. 環境変数ファイルの作成

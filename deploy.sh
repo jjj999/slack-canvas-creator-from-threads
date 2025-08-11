@@ -47,7 +47,7 @@ install_service() {
     # ユーザーが存在するかチェック
     if ! id "$SERVICE_USER" &>/dev/null; then
         print_info "Creating user $SERVICE_USER..."
-        sudo useradd --system --home-dir "$INSTALL_DIR" --shell /bin/false "$SERVICE_USER"
+        sudo useradd --system --create-home --home-dir "/home/$SERVICE_USER" --shell /bin/false "$SERVICE_USER"
     fi
 
     # インストールディレクトリを作成
@@ -59,10 +59,30 @@ install_service() {
     sudo cp -r "$SCRIPT_DIR"/* "$INSTALL_DIR/"
     sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 
-    # Poetry環境をセットアップ
-    print_info "Setting up Poetry environment..."
+    # Python環境をセットアップ
+    print_info "Installing Python dependencies with system pip..."
     cd "$INSTALL_DIR"
-    sudo -u "$SERVICE_USER" poetry install --only=main
+
+    # Python 3.12以上が必要
+    PYTHON_VERSION=$(python3 -c "import sys; print('.'.join(map(str, sys.version_info[:2])))")
+    REQUIRED_VERSION="3.12"
+
+    if python3 -c "import sys; exit(0 if sys.version_info >= (3, 12) else 1)"; then
+        print_info "Python $PYTHON_VERSION detected (>= $REQUIRED_VERSION required)"
+    else
+        print_error "Python $REQUIRED_VERSION or higher is required. Current version: $PYTHON_VERSION"
+        print_error "Please install Python 3.12+ or use Ubuntu 24.04+ which includes Python 3.12"
+        exit 1
+    fi
+
+    # 依存関係をインストール
+    sudo -u "$SERVICE_USER" python3 -m pip install --user -r requirements.txt
+
+    # ユーザーのpipインストールパスを確認
+    USER_SITE=$(sudo -u "$SERVICE_USER" python3 -c "import site; print(site.USER_SITE)")
+    USER_BASE=$(sudo -u "$SERVICE_USER" python3 -c "import site; print(site.USER_BASE)")
+    print_info "Packages installed to: $USER_SITE"
+    print_info "User base directory: $USER_BASE"
 
     # 環境変数ファイルの確認
     if [ ! -f "$INSTALL_DIR/.env" ]; then
@@ -113,10 +133,11 @@ uninstall_service() {
     sudo rm -rf "$INSTALL_DIR"
 
     # ユーザーを削除（オプション）
-    read -p "Do you want to remove the user '$SERVICE_USER'? [y/N]: " -n 1 -r
+    read -p "Do you want to remove the user '$SERVICE_USER' and its home directory? [y/N]: " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        sudo userdel "$SERVICE_USER" 2>/dev/null || true
+        sudo userdel -r "$SERVICE_USER" 2>/dev/null || true
+        print_info "User $SERVICE_USER and home directory removed"
     fi
 
     print_info "Uninstallation completed!"
