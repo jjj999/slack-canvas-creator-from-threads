@@ -100,6 +100,134 @@ python run.py
 ngrok http 3000
 ```
 
+## Ubuntuでのsystemdデーモン化
+
+本番環境でSlackアプリをUbuntuのsystemdサービスとして起動することができます。
+
+### 自動デプロイ
+
+付属のデプロイスクリプトを使用して簡単にインストールできます：
+
+```bash
+# サービスをインストール
+sudo ./deploy.sh install
+
+# .envファイルを設定（必須）
+sudo -u slackapp nano /opt/slack-canvas-creator-from-threads/.env
+
+# サービスを起動
+sudo systemctl start slack-canvas-creator
+
+# サービスの状態確認
+./deploy.sh status
+
+# ログの確認
+./deploy.sh logs
+```
+
+### 手動セットアップ
+
+#### 1. 専用ユーザーの作成
+```bash
+sudo useradd --system --home-dir /opt/slack-canvas-creator-from-threads --shell /bin/false slackapp
+```
+
+#### 2. プロジェクトファイルのコピー
+```bash
+sudo mkdir -p /opt/slack-canvas-creator-from-threads
+sudo cp -r . /opt/slack-canvas-creator-from-threads/
+sudo chown -R slackapp:slackapp /opt/slack-canvas-creator-from-threads
+```
+
+#### 3. Poetry環境のセットアップ
+```bash
+cd /opt/slack-canvas-creator-from-threads
+sudo -u slackapp poetry install --only=main
+```
+
+#### 4. 環境変数ファイルの作成
+```bash
+sudo -u slackapp nano /opt/slack-canvas-creator-from-threads/.env
+```
+
+以下の内容を設定：
+```env
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
+OPENAI_API_KEY=sk-...
+PORT=3000
+HOST=0.0.0.0
+```
+
+#### 5. systemdユニットファイルのインストール
+```bash
+sudo cp slack-canvas-creator.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable slack-canvas-creator
+```
+
+#### 6. サービスの起動と確認
+```bash
+# サービス起動
+sudo systemctl start slack-canvas-creator
+
+# 状態確認
+sudo systemctl status slack-canvas-creator
+
+# ログ確認
+sudo journalctl -u slack-canvas-creator -f
+```
+
+### サービス管理コマンド
+
+```bash
+# サービス起動
+sudo systemctl start slack-canvas-creator
+
+# サービス停止
+sudo systemctl stop slack-canvas-creator
+
+# サービス再起動
+sudo systemctl restart slack-canvas-creator
+
+# サービスの自動起動有効化
+sudo systemctl enable slack-canvas-creator
+
+# サービスの自動起動無効化
+sudo systemctl disable slack-canvas-creator
+
+# ログ確認
+sudo journalctl -u slack-canvas-creator -f
+```
+
+### デプロイスクリプトのコマンド
+
+```bash
+# インストール（要sudo）
+sudo ./deploy.sh install
+
+# アンインストール（要sudo）
+sudo ./deploy.sh uninstall
+
+# 再起動
+./deploy.sh restart
+
+# 状態確認
+./deploy.sh status
+
+# ログ表示
+./deploy.sh logs
+```
+
+### セキュリティ設定
+
+systemdユニットファイルには以下のセキュリティ設定が含まれています：
+
+- 専用ユーザー(`slackapp`)での実行
+- 最小権限でのファイルシステムアクセス
+- プライベート`/tmp`ディレクトリ
+- カーネル機能への制限付きアクセス
+
 ### Canvas作成の4つの方法
 
 #### 1. スレッドURLを指定（どこからでも実行可能）
