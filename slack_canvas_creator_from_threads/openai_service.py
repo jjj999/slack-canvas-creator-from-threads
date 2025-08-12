@@ -8,6 +8,7 @@ from openai.types.chat import ChatCompletion
 
 from .config import settings
 
+
 logger = logging.getLogger(__name__)
 
 
