@@ -6,6 +6,7 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_NAME="slack-canvas-creator-from-threads"
 SERVICE_NAME="slack-canvas-creator-from-threads"
+SERVICE_FILE="slack-canvas-creator-from-threads.service"  # プロジェクト名と統一
 INSTALL_DIR="/opt/$PROJECT_NAME"
 SERVICE_USER="slackapp"
 
@@ -157,8 +158,6 @@ install_service() {
             echo "  SLACK_SIGNING_SECRET="
             echo "  SLACK_APP_TOKEN="
             echo "  OPENAI_API_KEY="
-            echo "  PORT=3000"
-            echo "  HOST=0.0.0.0"
         fi
     else
         print_info ".env file found and ready"
@@ -166,7 +165,7 @@ install_service() {
 
     # systemdユニットファイルをコピー
     print_info "Installing systemd unit file..."
-    sudo cp "$INSTALL_DIR/$SERVICE_NAME.service" "/etc/systemd/system/"
+    sudo cp "$INSTALL_DIR/$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
 
     # systemdを再読み込み
     print_info "Reloading systemd..."
@@ -176,9 +175,23 @@ install_service() {
     print_info "Enabling service..."
     sudo systemctl enable "$SERVICE_NAME"
 
+    # サービスを起動
+    print_info "Starting service..."
+    sudo systemctl start "$SERVICE_NAME"
+
+    # サービスの状態を確認
+    print_info "Checking service status..."
+    if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
+        print_info "✅ Service is running successfully!"
+        sudo systemctl status "$SERVICE_NAME" --no-pager
+    else
+        print_warn "⚠️  Service failed to start. Check logs for details:"
+        print_info "View logs with: sudo journalctl -u $SERVICE_NAME -f"
+        sudo systemctl status "$SERVICE_NAME" --no-pager
+    fi
+
     print_info "Installation completed!"
-    print_warn "Please ensure .env file is properly configured before starting the service."
-    print_info "Start the service with: sudo systemctl start $SERVICE_NAME"
+    print_info "Service has been enabled and started automatically."
 }
 
 # サービスをアンインストール
