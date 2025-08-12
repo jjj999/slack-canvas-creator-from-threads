@@ -5,7 +5,7 @@ set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_NAME="slack-canvas-creator-from-threads"
-SERVICE_NAME="slack-canvas-creator"
+SERVICE_NAME="slack-canvas-creator-from-threads"
 INSTALL_DIR="/opt/$PROJECT_NAME"
 SERVICE_USER="slackapp"
 
@@ -57,10 +57,17 @@ install_service() {
     # プロジェクトファイルをコピー
     print_info "Copying project files..."
     sudo cp -r "$SCRIPT_DIR"/* "$INSTALL_DIR/"
+
+    # 隠しファイル（.envなど）も個別にコピー
+    if [ -f "$SCRIPT_DIR/.env" ]; then
+        print_info "Copying .env file..."
+        sudo cp "$SCRIPT_DIR/.env" "$INSTALL_DIR/"
+    fi
+
     sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 
     # Python環境をセットアップ
-    print_info "Installing Python dependencies with system pip..."
+    print_info "Setting up Python environment..."
     cd "$INSTALL_DIR"
 
     # Python 3.12以上が必要
@@ -75,27 +82,86 @@ install_service() {
         exit 1
     fi
 
-    # 依存関係をインストール
-    sudo -u "$SERVICE_USER" python3 -m pip install --user -r requirements.txt
+    # python3-venvが利用可能かチェック
+    print_info "Checking python3-venv availability..."
 
-    # ユーザーのpipインストールパスを確認
-    USER_SITE=$(sudo -u "$SERVICE_USER" python3 -c "import site; print(site.USER_SITE)")
-    USER_BASE=$(sudo -u "$SERVICE_USER" python3 -c "import site; print(site.USER_BASE)")
-    print_info "Packages installed to: $USER_SITE"
-    print_info "User base directory: $USER_BASE"
+    # Pythonバージョンを取得
+    PYTHON_MAJOR_MINOR=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+
+    # テスト用の仮想環境作成を試行
+    TEMP_VENV="/tmp/test-venv-$$"
+    if ! python3 -m venv "$TEMP_VENV" >/dev/null 2>&1; then
+        print_warn "python3-venv is not properly installed. Installing required packages..."
+        # Ubuntu/Debianの場合
+        if command -v apt >/dev/null 2>&1; then
+            sudo apt update
+            # Pythonバージョン固有のvenvパッケージをインストール
+            print_info "Installing python$PYTHON_MAJOR_MINOR-venv and python3-pip..."
+            sudo apt install -y python$PYTHON_MAJOR_MINOR-venv python3-pip
+
+            # 再度テスト
+            if ! python3 -m venv "$TEMP_VENV" >/dev/null 2>&1; then
+                print_warn "Version-specific venv failed, trying additional packages..."
+                sudo apt install -y python3-venv python3-full python$PYTHON_MAJOR_MINOR-dev
+            fi
+        # CentOS/RHEL/Fedoraの場合
+        elif command -v yum >/dev/null 2>&1; then
+            sudo yum install -y python3-pip python3-venv
+        elif command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y python3-pip python3-venv
+        else
+            print_error "Could not install python3-venv. Please install it manually."
+            exit 1
+        fi
+
+        # 最終テスト
+        if ! python3 -m venv "$TEMP_VENV" >/dev/null 2>&1; then
+            print_error "Failed to install python3-venv. Please install it manually:"
+            print_error "  sudo apt install python$PYTHON_MAJOR_MINOR-venv python3-pip  # for Ubuntu/Debian"
+            exit 1
+        else
+            print_info "python3-venv successfully installed and verified"
+        fi
+    else
+        print_info "python3-venv is already available"
+    fi
+
+    # テスト用仮想環境をクリーンアップ
+    rm -rf "$TEMP_VENV" 2>/dev/null || true    # 仮想環境を作成
+    VENV_DIR="$INSTALL_DIR/venv"
+    print_info "Creating Python virtual environment at $VENV_DIR..."
+    sudo -u "$SERVICE_USER" python3 -m venv "$VENV_DIR"
+
+    # 仮想環境内でpipをアップグレード
+    print_info "Upgrading pip in virtual environment..."
+    sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install --upgrade pip
+
+    # 依存関係をインストール
+    print_info "Installing Python dependencies in virtual environment..."
+    sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install -r requirements.txt
 
     # 環境変数ファイルの確認
     if [ ! -f "$INSTALL_DIR/.env" ]; then
-        print_warn ".env file not found. Please create it manually:"
-        echo "  sudo -u $SERVICE_USER nano $INSTALL_DIR/.env"
-        echo ""
-        echo "Required environment variables:"
-        echo "  SLACK_BOT_TOKEN="
-        echo "  SLACK_SIGNING_SECRET="
-        echo "  SLACK_APP_TOKEN="
-        echo "  OPENAI_API_KEY="
-        echo "  PORT=3000"
-        echo "  HOST=0.0.0.0"
+        print_warn ".env file not found in $INSTALL_DIR"
+        if [ -f "$SCRIPT_DIR/.env" ]; then
+            print_info "Found .env in source directory, copying it..."
+            sudo cp "$SCRIPT_DIR/.env" "$INSTALL_DIR/"
+            sudo chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/.env"
+            print_info ".env file copied successfully"
+        else
+            print_warn "No .env file found. Please create it manually:"
+            echo "  sudo -u $SERVICE_USER nano $INSTALL_DIR/.env"
+            echo ""
+            echo "Required environment variables:"
+            echo "  SLACK_BOT_TOKEN="
+            echo "  SLACK_SIGNING_SECRET="
+            echo "  SLACK_APP_TOKEN="
+            echo "  OPENAI_API_KEY="
+            echo "  PORT=3000"
+            echo "  HOST=0.0.0.0"
+        fi
+    else
+        print_info ".env file found and ready"
     fi
 
     # systemdユニットファイルをコピー
