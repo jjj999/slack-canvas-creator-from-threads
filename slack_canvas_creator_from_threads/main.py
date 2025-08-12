@@ -1,4 +1,4 @@
-"""Slack Bolt app for handling Slack events and commands."""
+"""Slack Bolt app for handling Slack events and commands in Socket Mode."""
 
 import logging
 import asyncio
@@ -17,7 +17,7 @@ from .app import CanvasCreatorApp
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Slack app
+# Initialize Slack app for Socket Mode
 app = AsyncApp(
     token=settings.slack_bot_token,
     signing_secret=settings.slack_signing_secret
@@ -198,15 +198,11 @@ async def handle_mention_no_button(ack: Ack, body: Dict[str, Any], client: Async
 
 
 async def main() -> None:
-    """Main function to start the Slack app."""
+    """Main function to start the Slack app in Socket Mode."""
     try:
-        if settings.slack_app_token:
-            # Socket mode (for development)
-            handler: AsyncSocketModeHandler = AsyncSocketModeHandler(app, settings.slack_app_token)
-            await handler.start_async()
-        else:
-            # HTTP mode (for production)
-            await app.start_async(port=settings.port, host=settings.host)
+        # Socket mode only
+        handler: AsyncSocketModeHandler = AsyncSocketModeHandler(app, settings.slack_app_token)
+        await handler.start_async()
     except Exception as e:
         logger.error(f"Error starting app: {e}")
         raise
