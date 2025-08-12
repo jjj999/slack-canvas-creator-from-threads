@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any
 from .slack_service import SlackService
 from .openai_service import OpenAIService
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,10 +37,6 @@ class CanvasCreatorApp:
             Canvas ID
         """
         try:
-            # Step 0: Send processing message immediately
-            logger.info("Sending processing message")
-            await self.slack_service.send_processing_message(channel, user_id, thread_ts)
-
             # Step 1: Get thread messages
             logger.info(f"Getting thread messages for {thread_ts}")
             messages: List[Dict[str, Any]] = await self.slack_service.get_thread_messages(channel, thread_ts)

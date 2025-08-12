@@ -9,6 +9,7 @@ from slack_sdk.web import SlackResponse
 
 from .config import settings
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -99,6 +100,7 @@ class SlackService:
     async def send_processing_message(self, channel: str, user_id: str, thread_ts: str) -> str:
         """
         Send a "Canvas生成中" message to indicate processing has started.
+        Note: This method is disabled to avoid duplicate processing messages.
 
         Args:
             channel: Channel ID
@@ -106,22 +108,12 @@ class SlackService:
             thread_ts: Thread timestamp
 
         Returns:
-            Message timestamp of the processing message
+            Message timestamp of the processing message (empty string since disabled)
         """
-        try:
-            response: SlackResponse = self.client.chat_postMessage(
-                channel=channel,
-                text=f"<@{user_id}> Canvas生成中です...しばらくお待ちください 🔄",
-                thread_ts=thread_ts
-            )
-
-            message_ts: str = response["ts"]
-            logger.info(f"Sent processing message with timestamp: {message_ts}")
-            return message_ts
-
-        except SlackApiError as e:
-            logger.error(f"Error sending processing message: {e.response['error']}")
-            raise
+        # Disabled to avoid duplicate processing messages
+        # Ephemeral messages are used instead in the button handlers
+        logger.info("Processing message sending is disabled - using ephemeral messages instead")
+        return ""
 
     async def create_canvas(self, title: str, content: str) -> str:
         """
@@ -280,4 +272,36 @@ class SlackService:
 
         except SlackApiError as e:
             logger.error(f"Error sending canvas link: {e.response['error']}")
+            raise
+
+    async def send_ephemeral_message(self, channel: str, user_id: str, text: str, blocks: Optional[List[Dict[str, Any]]] = None, thread_ts: Optional[str] = None) -> None:
+        """
+        Send an ephemeral message that only the specified user can see.
+
+        Args:
+            channel: Channel to send message to
+            user_id: User ID who will see the message
+            text: Message text
+            blocks: Optional blocks for rich formatting
+            thread_ts: Optional thread timestamp to send message in thread
+        """
+        try:
+            kwargs = {
+                "channel": channel,
+                "user": user_id,
+                "text": text
+            }
+
+            if blocks:
+                kwargs["blocks"] = blocks
+
+            if thread_ts:
+                kwargs["thread_ts"] = thread_ts
+
+            self.client.chat_postEphemeral(**kwargs)
+
+            logger.info(f"Sent ephemeral message to user {user_id}")
+
+        except SlackApiError as e:
+            logger.error(f"Error sending ephemeral message: {e.response['error']}")
             raise

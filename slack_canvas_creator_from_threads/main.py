@@ -13,6 +13,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 from .config import settings
 from .app import CanvasCreatorApp
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -26,86 +27,8 @@ app = AsyncApp(
 canvas_creator: CanvasCreatorApp = CanvasCreatorApp()
 
 
-@app.command("/create-canvas")
-async def handle_create_canvas_command(ack: Ack, command: Dict[str, Any], client: AsyncWebClient) -> None:
-    """Handle the /create-canvas slash command."""
-    await ack()
-
-    try:
-        channel_id: str = command["channel_id"]
-        user_id: str = command["user_id"]
-        text: str = command.get("text", "").strip()
-
-        # If no argument provided, show usage (slash commands can't be run in threads)
-        if not text:
-            await client.chat_postEphemeral(
-                channel=channel_id,
-                user=user_id,
-                text="📝 **Canvas作成方法**\n\n"
-                     "**方法1: スレッドURLから作成**\n"
-                     "`/create-canvas <スレッドのURL>`\n"
-                     "例: `/create-canvas https://workspace.slack.com/archives/C123/p1234567890123456`\n\n"
-                     "**方法2: メッセージリンクから作成**\n"
-                     "`/create-canvas <メッセージのパーマリンク>`\n\n"
-                     "**方法3: スレッド内で自然言語**\n"
-                     "スレッド内で「canvasを作成して」「まとめてcanvas」などと送信\n\n"
-                     "**方法4: スレッド内でボットにメンション**\n"
-                     "スレッド内で `@slack-canvas-crator-from-threads まとめて` と送信"
-            )
-            return
-
-        # Parse different input formats
-        thread_ts = None
-
-        # Case 1: Slack URL format
-        if "slack.com" in text and "/p" in text:
-            # Extract timestamp from URL like: https://workspace.slack.com/archives/C123/p1234567890123456
-            url_parts = text.split("/p")
-            if len(url_parts) > 1:
-                timestamp_part = url_parts[1].split("?")[0]  # Remove query parameters
-                thread_ts = timestamp_part[:10] + "." + timestamp_part[10:]
-
-        # Case 2: Direct timestamp format (p1234567890123456)
-        elif text.startswith("p") and len(text) >= 16:
-            timestamp_part = text[1:]  # Remove 'p' prefix
-            thread_ts = timestamp_part[:10] + "." + timestamp_part[10:]
-
-        # Case 3: Already formatted timestamp (1234567890.123456)
-        elif "." in text and len(text.replace(".", "")) >= 16:
-            thread_ts = text
-
-        if not thread_ts:
-            await client.chat_postEphemeral(
-                channel=channel_id,
-                user=user_id,
-                text="❌ スレッドの識別に失敗しました。\n\n"
-                     "以下の形式で指定してください：\n"
-                     "• SlackのスレッドURL\n"
-                     "• メッセージのパーマリンク\n"
-                     "• またはスレッド内で「canvasを作成」と送信"
-            )
-            return
-
-        # Create canvas from thread
-        canvas_id: str = await canvas_creator.create_canvas_from_thread(
-            channel=channel_id,
-            thread_ts=thread_ts,
-            user_id=user_id
-        )
-
-        logger.info(f"Canvas {canvas_id} created successfully for user {user_id}")
-
-    except Exception as e:
-        logger.error(f"Error handling create-canvas command: {e}")
-        await client.chat_postEphemeral(
-            channel=command["channel_id"],
-            user=command["user_id"],
-            text=f"❌ エラーが発生しました: {str(e)}"
-        )
-
-
 @app.event("app_mention")
-async def handle_app_mention(event: Dict[str, Any], say: Say) -> None:
+async def handle_app_mention(event: Dict[str, Any], say: Say, client: AsyncWebClient) -> None:
     """Handle mentions of the bot for canvas creation."""
     try:
         text: str = event.get("text", "").lower()
@@ -116,15 +39,23 @@ async def handle_app_mention(event: Dict[str, Any], say: Say) -> None:
         if "thread_ts" in event:
             thread_ts: str = event["thread_ts"]
 
-            # Keywords that trigger canvas creation
-            trigger_words = [
-                "まとめ", "canvas", "キャンバス", "作成", "整理",
-                "要約", "summary", "create", "make"
+            # Keywords that trigger immediate canvas creation
+            immediate_trigger_words = [
+                "まとめて", "canvas作成", "キャンバス作成", "作成して", "整理して",
+                "要約して", "summary", "create", "make"
             ]
 
-            # Check if message contains trigger words
-            if any(word in text for word in trigger_words):
-                # Create canvas from the current thread
+            # Check if message contains immediate trigger words
+            if any(word in text for word in immediate_trigger_words):
+                # Send ephemeral processing message to user only
+                await client.chat_postEphemeral(
+                    channel=channel,
+                    user=user_id,
+                    text="🔄 Canvasを作成中です。少々お待ちください...",
+                    thread_ts=thread_ts
+                )
+
+                # Create canvas immediately from the current thread
                 canvas_id: str = await canvas_creator.create_canvas_from_thread(
                     channel=channel,
                     thread_ts=thread_ts,
@@ -133,106 +64,64 @@ async def handle_app_mention(event: Dict[str, Any], say: Say) -> None:
 
                 logger.info(f"Canvas {canvas_id} created from app mention")
             else:
-                # Provide help message
-                await say(
-                    text=f"<@{user_id}> 👋 こんにちは！\n\n"
-                         "このスレッドをCanvasにまとめるには、以下のように話しかけてください：\n"
-                         "• `@slack-canvas-crator-from-threads まとめて`\n"
-                         "• `@slack-canvas-crator-from-threads canvasを作成`\n"
-                         "• `@slack-canvas-crator-from-threads この内容を整理して`",
+                # Show confirmation dialog with Yes/No buttons (ephemeral)
+                blocks = [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "📝 このスレッドの内容をCanvasにまとめますか？\n\n" +
+                                    "⚠️ この操作はOpenAI APIを使用してトークンを消費します。"
+                        }
+                    },
+                    {
+                        "type": "actions",
+                        "elements": [
+                            {
+                                "type": "button",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "Yes - Canvasを作成",
+                                    "emoji": True
+                                },
+                                "style": "primary",
+                                "action_id": "create_canvas_from_mention_yes",
+                                "value": f"{channel}|{thread_ts}|{user_id}"
+                            },
+                            {
+                                "type": "button",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "No - キャンセル",
+                                    "emoji": True
+                                },
+                                "action_id": "create_canvas_from_mention_no",
+                                "value": f"{channel}|{thread_ts}|{user_id}"
+                            }
+                        ]
+                    }
+                ]
+
+                await client.chat_postEphemeral(
+                    channel=channel,
+                    user=user_id,
+                    text="Canvasを作成しますか？",
+                    blocks=blocks,
                     thread_ts=thread_ts
                 )
         else:
             # Not in a thread, provide general help
             await say(
-                text=f"<@{user_id}> 👋 slack-canvas-crator-from-threads です！\n\n"
+                text=f"<@{user_id}> 👋 slack-canvas-creator-from-threads です！\n\n"
                      "**使用方法:**\n"
-                     "• スレッド内で `@slack-canvas-crator-from-threads まとめて` とメンション\n"
+                     "• スレッド内で `@slack-canvas-creator-from-threads` とメンション（確認ダイアログ付き）\n"
+                     "• スレッド内で `@slack-canvas-creator-from-threads まとめて` （即座実行）\n"
                      "• `/create-canvas <スレッドURL>` でスレッドを指定\n"
-                     "• スレッド内で「canvasを作成」などの自然言語"
+                     "• `/create-canvas-from-thread` （チャンネルの最新スレッド）"
             )
 
     except Exception as e:
         logger.error(f"Error handling app mention: {e}")
-
-
-@app.message("canvas")
-async def handle_canvas_mention(message: Dict[str, Any], say: Say) -> None:
-    """Handle messages mentioning 'canvas' for quick canvas creation."""
-    try:
-        # Only respond if this is a threaded message
-        if "thread_ts" in message:
-            thread_ts: str = message["thread_ts"]
-            channel: str = message["channel"]
-            user_id: str = message["user"]
-
-            # Check if the message contains specific keywords for canvas creation
-            text: str = message.get("text", "").lower()
-
-            # Keywords that trigger canvas creation
-            trigger_phrases = [
-                "canvasを作成",
-                "canvas作成",
-                "canvasにまとめ",
-                "まとめてcanvas",
-                "canvas化",
-                "キャンバス作成",
-                "キャンバスにまとめ"
-            ]
-
-            # Check if any trigger phrase is in the message
-            should_create_canvas = any(phrase in text for phrase in trigger_phrases)
-
-            if should_create_canvas:
-                # Create canvas from the current thread
-                canvas_id: str = await canvas_creator.create_canvas_from_thread(
-                    channel=channel,
-                    thread_ts=thread_ts,
-                    user_id=user_id
-                )
-
-                logger.info(f"Canvas {canvas_id} created from message mention")
-            else:
-                # Provide helpful suggestion with button
-                await say(
-                    text=f"<@{user_id}> 💡 このスレッドをCanvasにまとめますか？",
-                    thread_ts=thread_ts,
-                    blocks=[
-                        {
-                            "type": "section",
-                            "text": {
-                                "type": "mrkdwn",
-                                "text": f"<@{user_id}> 💡 このスレッドをCanvasにまとめますか？"
-                            }
-                        },
-                        {
-                            "type": "actions",
-                            "elements": [
-                                {
-                                    "type": "button",
-                                    "text": {
-                                        "type": "plain_text",
-                                        "text": "📝 Canvasを作成"
-                                    },
-                                    "action_id": "create_canvas_button",
-                                    "value": f"{channel}|{thread_ts}|{user_id}"
-                                }
-                            ]
-                        },
-                        {
-                            "type": "context",
-                            "elements": [
-                                {
-                                    "type": "mrkdwn",
-                                    "text": "または「canvasを作成」「まとめて」などと送信してください"
-                                }
-                            ]
-                        }
-                    ]
-                )
-
-    except Exception as e:
-        logger.error(f"Error handling canvas mention: {e}")
 
 
 @app.event("message")
@@ -243,9 +132,9 @@ async def handle_message_events(body: Dict[str, Any], logger) -> None:
     pass
 
 
-@app.action("create_canvas_button")
-async def handle_create_canvas_button(ack: Ack, body: Dict[str, Any], client: AsyncWebClient) -> None:
-    """Handle canvas creation button click."""
+@app.action("create_canvas_from_mention_yes")
+async def handle_mention_yes_button(ack: Ack, body: Dict[str, Any], client: AsyncWebClient) -> None:
+    """Handle 'Yes' button click from thread mention."""
     await ack()
 
     try:
@@ -253,20 +142,12 @@ async def handle_create_canvas_button(ack: Ack, body: Dict[str, Any], client: As
         button_value: str = body["actions"][0]["value"]
         channel, thread_ts, user_id = button_value.split("|")
 
-        # Update the message to show processing
-        await client.chat_update(
+        # Send ephemeral processing message to user only
+        await client.chat_postEphemeral(
             channel=channel,
-            ts=body["message"]["ts"],
-            text="🔄 Canvasを作成中...",
-            blocks=[
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "🔄 Canvasを作成中です。少々お待ちください..."
-                    }
-                }
-            ]
+            user=user_id,
+            text="🔄 Canvasを作成中です。少々お待ちください...",
+            thread_ts=thread_ts
         )
 
         # Create canvas from thread
@@ -276,44 +157,44 @@ async def handle_create_canvas_button(ack: Ack, body: Dict[str, Any], client: As
             user_id=user_id
         )
 
-        # Update message with success
-        await client.chat_update(
-            channel=channel,
-            ts=body["message"]["ts"],
-            text="✅ Canvasが作成されました！",
-            blocks=[
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"✅ <@{user_id}> Canvasが作成されました！\nCanvas IDでリンクが送信されます。"
-                    }
-                }
-            ]
-        )
-
-        logger.info(f"Canvas {canvas_id} created from button click")
+        logger.info(f"Canvas {canvas_id} created from mention Yes button click")
 
     except Exception as e:
-        logger.error(f"Error handling canvas button: {e}")
-        # Update message with error
+        logger.error(f"Error handling mention Yes button: {e}")
+        # Send error message to user only
         try:
-            await client.chat_update(
-                channel=body["channel"]["id"],
-                ts=body["message"]["ts"],
-                text="❌ エラーが発生しました",
-                blocks=[
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": f"❌ エラーが発生しました: {str(e)}"
-                        }
-                    }
-                ]
+            await client.chat_postEphemeral(
+                channel=channel,
+                user=user_id,
+                text=f"❌ エラーが発生しました: {str(e)}",
+                thread_ts=thread_ts
             )
         except Exception:
             pass
+
+
+@app.action("create_canvas_from_mention_no")
+async def handle_mention_no_button(ack: Ack, body: Dict[str, Any], client: AsyncWebClient) -> None:
+    """Handle 'No' button click from thread mention."""
+    await ack()
+
+    try:
+        # Parse the button value
+        button_value: str = body["actions"][0]["value"]
+        channel, thread_ts, user_id = button_value.split("|")
+
+        # Send ephemeral cancellation message to user only
+        await client.chat_postEphemeral(
+            channel=channel,
+            user=user_id,
+            text="👍 Canvas作成をキャンセルしました。",
+            thread_ts=thread_ts
+        )
+
+        logger.info(f"Canvas creation cancelled by user {user_id} from mention")
+
+    except Exception as e:
+        logger.error(f"Error handling mention No button: {e}")
 
 
 async def main() -> None:
