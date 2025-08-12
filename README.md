@@ -2,17 +2,17 @@
 
 SlackのスレッドからOpenAI APIを使ってトピックを整理し、Canvasを作成するSlackアプリです。
 
-## 機能
+## 使い方（Slack ユーザー）
 
-- **スレッドのチャット内容を自動読み込み**
-- **OpenAI GPT-4o-miniを使用したスレッド内容の要約**
-- **AI生成による適切なCanvasタイトル作成**
-- **スレッドリンクの自動挿入**（Slackアプリで開く）
-- **今後の対策項目の自動生成**
-- **Canvas作成中の進捗通知**
-- **複数の実行方法をサポート**
+1. チャット内容を要約した Canvas を作成したいスレッドに移動
+2. スレッド内でボットをメンション（何も文字を入力しないと警告ポップアップが出るので、適当に `.` などを入力）してメッセージを送信
+    - 例: `@slack-canvas-creator-from-threads .`
+3. Canvas を作成するかどうかの確認メッセージが表示されるので、**Yes** をクリック
+4. 作成された Canvas がスレッドに投稿されます
 
-## Canvas構成
+![usage-slack-canvas-creator-from-threads](./res/usage-slack-canvas-creator-from-threads.gif)
+
+### 作成される Canvas の文章構成
 
 生成されるCanvasには以下の項目が含まれます：
 
@@ -24,15 +24,72 @@ SlackのスレッドからOpenAI APIを使ってトピックを整理し、Canva
 6. **参考情報やリンク**（該当する場合）
 7. **元のスレッドへのリンク**（自動挿入）
 
-## セットアップ
+### 確認メッセージのスキップ
 
-### 1. 依存関係のインストール
+- 確認メッセージをスキップするには、ボットをメンションする際に特定のキーワードを含める必要があります。
+- 例えば、`@slack-canvas-creator-from-threads 要約して` と入力することで、確認メッセージをスキップできます。
+- スキップするためのキーワード
+  - `まとめて`
+  - `canvas作成`
+  - `キャンバス作成`
+  - `作成して`
+  - `整理して`
+  - `要約して`
+  - `summary`
+  - `create`
+  - `make`
 
-```bash
-poetry install
-```
+## アプリの使用方法
 
-### 2. 環境変数の設定
+### 実行環境要件
+
+- Python 3.12 以上
+- 依存関係: [pyproject.toml](./pyproject.toml) を参照
+
+### 注意事項
+
+- Canvas機能を使用するには、SlackワークスペースでCanvas機能が有効になっている必要があります
+- Canvas APIが利用できない場合、自動的にMarkdownファイルとしてアップロードされます
+- OpenAI APIの使用料金は使用者の負担です
+- スレッドリンクはSlackアプリで開くように設定されています
+
+### 1. Slackアプリの作成
+
+> [!NOTE]
+> 現時点でこのアプリは Slack Marketplace に公開していません。
+> 使用するためには、Slackワークスペースでアプリを手動で作成する必要があります。
+
+1. App-Level Token の作成（Socket Mode を使用するため）
+   - 必要なスコープ
+     - `connections:write`  # 接続の作成・管理
+2. Bot User OAuth Token の作成
+    - 必要なスコープ
+      - `app_mentions:read` # アプリメンションの受信
+      - `canvases:write`    # Canvas作成・編集
+      - `channels:history`  # チャンネルメッセージ履歴の読み取り
+      - `channels:read`     # チャンネル情報の読み取り
+      - `chat:write`        # メッセージ送信
+      - `chat:write.public` # パブリックチャンネルへのメッセージ送信
+      - `commands`          # スラッシュコマンド
+      - `files:write`       # ファイルアップロード（フォールバック用）
+      - `groups:history`    # プライベートチャンネル履歴の読み取り
+    - Bot User OAuth Token 作成後にワークスペースにインストール
+3. Event Subscriptions の設定
+   - 必要なイベント
+     - `app_mention`        # ボットへのメンション
+     - `message.channels`   # チャンネルメッセージ
+     - `message.groups`     # プライベートチャンネルメッセージ
+4. 以下の情報をメモしておく
+   1. Bot User OAuth Token
+   2. App-Level Token
+   3. Signing Secret
+
+### 2. OpenAI API の設定
+
+1. [OpenAI API](https://platform.openai.com/) の API キーを作成（詳細は OpenAI のドキュメントを参照）
+2. API キーをメモしておく
+
+### 3. 環境変数の設定
 
 `.env.example`を`.env`にコピーして必要な値を設定：
 
@@ -51,246 +108,53 @@ SLACK_APP_TOKEN=xapp-...           # Socket Mode用のアプリトークン（�
 # OpenAI設定
 OPENAI_API_KEY=sk-...              # OpenAI APIキー
 OPENAI_MODEL=gpt-4o-mini           # 使用するOpenAIモデル（デフォルト）
-
-# サーバー設定（本番環境）
-PORT=3000                          # サーバーポート（デフォルト）
 ```
 
-### 3. Slackアプリの設定
+### 4. ローカルでの実行テスト
 
-#### 必要なBot Token Scopes
-```
-channels:history     # チャンネルメッセージ履歴の読み取り
-groups:history       # プライベートチャンネル履歴の読み取り
-chat:write          # メッセージ送信
-chat:write.public   # パブリックチャンネルへのメッセージ送信
-canvases:write      # Canvas作成・編集
-commands            # スラッシュコマンド
-app_mentions:read   # アプリメンションの受信
-channels:read       # チャンネル情報の読み取り
-files:write         # ファイルアップロード（フォールバック用）
-```
+1. ソースコードのダウンロード
+    ```bash
+    git clone https://github.com/jjj999/slack-canvas-creator-from-threads.git
+    cd slack-canvas-creator-from-threads/
+    ```
+2. 依存関係のインストール
 
-#### Event Subscriptions
-```
-app_mention         # ボットへのメンション
-message.channels    # チャンネルメッセージ
-message.groups      # プライベートチャンネルメッセージ
-```
+   このプロジェクトは [Poetry](https://python-poetry.org/) を使用して依存関係を管理しています。以下のコマンドで依存関係をインストールします：
 
-#### スラッシュコマンド
-- コマンド: `/create-canvas`
-- 説明: Create a Canvas from thread URL
-
-## 使用方法
-
-### アプリの起動
-
-#### 開発環境（Socket Mode）
-```bash
-python -m slack_canvas_creator_from_threads.main
-```
-
-#### 本番環境（HTTP Mode）
-```bash
-# サーバー起動
-python run.py
-
-# ngrokを使用してHTTPSエンドポイントを作成
-ngrok http 3000
-```
-
-## Ubuntuでのsystemdデーモン化
-
-本番環境でSlackアプリをUbuntuのsystemdサービスとして起動することができます。
-
-### システム要件
-
-- **OS**: Ubuntu 24.04 LTS以降
-- **Python**: 3.12以降（Ubuntu 24.04にデフォルトで含まれます）
-- **pip**: Python標準のパッケージマネージャー
-
-### 自動デプロイ
-
-付属のデプロイスクリプトを使用して簡単にインストールできます：
-
-```bash
-# サービスをインストール
-sudo ./deploy.sh install
-
-# .envファイルを設定（必須）
-sudo -u slackapp nano /opt/slack-canvas-creator-from-threads/.env
-
-# サービスを起動
-sudo systemctl start slack-canvas-creator
-
-# サービスの状態確認
-./deploy.sh status
-
-# ログの確認
-./deploy.sh logs
-```
-
-### 手動セットアップ
-
-#### 1. 専用ユーザーの作成
-```bash
-sudo useradd --system --create-home --home-dir /home/slackapp --shell /bin/false slackapp
-```
-
-#### 2. プロジェクトファイルのコピー
-```bash
-sudo mkdir -p /opt/slack-canvas-creator-from-threads
-sudo cp -r . /opt/slack-canvas-creator-from-threads/
-sudo chown -R slackapp:slackapp /opt/slack-canvas-creator-from-threads
-```
-
-#### 3. Python依存関係のインストール
-```bash
-cd /opt/slack-canvas-creator-from-threads
-
-# Python 3.12以上が必要（Ubuntu 24.04以降）
-python3 --version
-
-# 依存関係をユーザーレベルでインストール
-sudo -u slackapp python3 -m pip install --user -r requirements.txt
-```
-
-#### 4. 環境変数ファイルの作成
-```bash
-sudo -u slackapp nano /opt/slack-canvas-creator-from-threads/.env
-```
-
-以下の内容を設定：
-```env
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_SIGNING_SECRET=...
-OPENAI_API_KEY=sk-...
-PORT=3000
-HOST=0.0.0.0
-```
-
-#### 5. systemdユニットファイルのインストール
-```bash
-sudo cp slack-canvas-creator.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable slack-canvas-creator
-```
-
-#### 6. サービスの起動と確認
-```bash
-# サービス起動
-sudo systemctl start slack-canvas-creator
-
-# 状態確認
-sudo systemctl status slack-canvas-creator
-
-# ログ確認
-sudo journalctl -u slack-canvas-creator -f
-```
-
-### サービス管理コマンド
-
-```bash
-# サービス起動
-sudo systemctl start slack-canvas-creator
-
-# サービス停止
-sudo systemctl stop slack-canvas-creator
-
-# サービス再起動
-sudo systemctl restart slack-canvas-creator
-
-# サービスの自動起動有効化
-sudo systemctl enable slack-canvas-creator
-
-# サービスの自動起動無効化
-sudo systemctl disable slack-canvas-creator
-
-# ログ確認
-sudo journalctl -u slack-canvas-creator -f
-```
-
-### デプロイスクリプトのコマンド
-
-```bash
-# インストール（要sudo）
-sudo ./deploy.sh install
-
-# アンインストール（要sudo）
-sudo ./deploy.sh uninstall
-
-# 再起動
-./deploy.sh restart
-
-# 状態確認
-./deploy.sh status
-
-# ログ表示
-./deploy.sh logs
-```
-
-### セキュリティ設定
-
-systemdユニットファイルには以下のセキュリティ設定が含まれています：
-
-- 専用ユーザー(`slackapp`)での実行
-- 最小権限でのファイルシステムアクセス
-- プライベート`/tmp`ディレクトリ
-- カーネル機能への制限付きアクセス
-
-### Canvas作成の4つの方法
-
-#### 1. スレッドURLを指定（どこからでも実行可能）
-任意のチャンネルで以下のようにスレッドのURLを指定：
-```
-/create-canvas https://yourworkspace.slack.com/archives/C1234567890/p1234567890123456
-```
-
-**スレッドURLの取得方法：**
-1. スレッドの最初のメッセージにマウスオーバー
-2. 「︙」（その他のアクション）をクリック
-3. 「リンクをコピー」を選択
-4. コピーしたURLを `/create-canvas` の後に貼り付け
-
-#### 2. スレッド内でボットにメンション（最も簡単）
-スレッド内で以下のようにボットにメンション：
-```
-@slack-canvas-creator-from-threads まとめて
-@slack-canvas-creator-from-threads canvasを作成
-@slack-canvas-creator-from-threads この内容を整理して
-```
-
-#### 3. スレッド内で自然言語（簡単）
-スレッド内で以下のようなメッセージを送信：
-- 「canvasを作成して」
-- 「この内容をcanvasにまとめて」
-- 「まとめてcanvas」
-- 「canvas化して」
-
-#### 4. スレッド内でボタンクリック（最も直感的）
-スレッド内で「canvas」というキーワードを含むメッセージを送信すると、Canvas作成ボタンが表示されます。
-
-### 実行フロー
-
-1. **即座に処理開始通知**
-   ```
-   Canvas生成中です...しばらくお待ちください
+   ```bash
+   poetry install
    ```
 
-2. **AI処理とCanvas作成**
-   - スレッドメッセージの取得
-   - スレッドリンクの生成
-   - OpenAI APIによる要約とタイトル生成
-   - Canvas作成
+   (非推奨) pip を用いてもインストール可能です：
 
-3. **完了通知**
+   ```bash
+   pip install -r requirements.txt
    ```
-   スレッドの内容をまとめたCanvasを作成しました！
+3. アプリの起動
 
-   Canvas: [AI生成タイトル]
-   https://yourworkspace.slack.com/docs/T123456789/F099CANVAS1
-   ```
+    poetry でインストールした場合
+    ```bash
+    poetry run python run.py
+    ```
+
+    pip でインストールした場合
+    ```bash
+    python run.py
+    ```
+5. Slack で動作確認
+
+### 5. デプロイ
+
+#### ホスティングサービスを使用する場合
+
+- ローカルでの実行テストと同じようにして、ホスティングサービス（Heroku, AWS, GCPなど）にデプロイできます。
+
+#### Ubuntu での systemd デーモン化
+
+- このアプリは Socket Mode を前提としているので、ローカルマシンで起動して使用できます
+- 本リポジトリでは Ubuntu での systemd を使用する方法を提供しています（詳細は[こちら](./docs/systemd.md)）
+
+# 開発環境セットアップ
 
 ## プロジェクト構造
 
@@ -303,39 +167,3 @@ slack_canvas_creator_from_threads/
 ├── slack_service.py    # Slack API操作
 └── openai_service.py   # OpenAI API操作
 ```
-
-## 技術仕様
-
-- **Python**: 3.12+
-- **Slack Framework**: Slack Bolt for Python
-- **AI Model**: OpenAI GPT-4o-mini
-- **Configuration**: Pydantic Settings
-- **Connection Mode**: Socket Mode（開発）/ HTTP Mode（本番）
-
-## 注意事項
-
-- **スラッシュコマンドはスレッド内では実行できません**（Slackの制限）
-- Canvas APIが利用できない場合、自動的にMarkdownファイルとしてアップロードされます
-- OpenAI APIの使用には料金が発生します
-- Canvas機能を使用するには、SlackワークスペースでCanvas機能が有効になっている必要があります
-- スレッドリンクはSlackアプリで開くように設定されています
-
-## トラブルシューティング
-
-### Canvas作成に失敗する場合
-1. Canvas APIの権限を確認
-2. ワークスペースでCanvas機能が有効か確認
-3. 自動的にMarkdownファイルのフォールバックが実行されるか確認
-
-### OpenAI APIエラーの場合
-1. APIキーが正しく設定されているか確認
-2. OpenAIアカウントの残高を確認
-3. レート制限に達していないか確認
-
-### Socket Mode接続エラーの場合
-1. `SLACK_APP_TOKEN`が正しく設定されているか確認
-2. Slack AppでSocket Modeが有効になっているか確認
-
-## ライセンス
-
-MIT License
