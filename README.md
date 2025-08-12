@@ -10,7 +10,9 @@ SlackのスレッドからOpenAI APIを使ってトピックを整理し、Canva
 3. Canvas を作成するかどうかの確認メッセージが表示されるので、**Yes** をクリック
 4. 作成された Canvas がスレッドに投稿されます
 
-![usage-slack-canvas-creator-from-threads](./res/usage-slack-canvas-creator-from-threads.gif)
+<div align="center">
+  <img src="./res/usage-slack-canvas-creator-from-threads.gif" alt="usage-slack-canvas-creator-from-threads" width="50%">
+</div>
 
 ### 作成される Canvas の文章構成
 
